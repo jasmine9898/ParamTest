@@ -1,0 +1,52 @@
+一.jboss thread数：
+修改文件standalone.xml，设置thread数，standalone.xml所在目录 EAP_HOME/standalone/configuration 或者  EAP_HOME/domain/configuration
+
+<connector name="http" protocol="HTTP/1.1" scheme="http" socket-binding="http" executor="uq-thread-pool"/>
+
+<subsystem xmlns="urn:jboss:domain:threads:1.1">
+            <thread-factory name="http-connector-factory" priority="1"/>
+            <unbounded-queue-thread-pool name="uq-thread-pool">
+                <max-threads count="2"/>
+                <keepalive-time time="60" unit="seconds"/>
+                <thread-factory name="http-connector-factory"/>
+            </unbounded-queue-thread-pool>
+</subsystem>
+ 
+二.修改配置war包中配置文件jvm.properties
+ MaxHeapSize为java进程配置最大堆内存，
+ heap_threshold为tingyun.properties中nbs.circuit_breaker.heap_threshold（可用堆内存阈值）
+ MaxNewSize为java进程配置最大young区内存
+三.
+ 应用说明：
+  1.后台有增加GC CPU耗时的定时操作，具体GC CPU耗时百分比可通过jprofiler、jvisualvm、jconsole等工具查看。
+  2.后台有清内存的定时操作，间隔时间为10分钟。
+ 可用测试链接
+/ParamTest/memoryAdd 增加内存消耗，触发探针开启资源保护
+/ParamTest/memoryClean 清内存，减小内存消耗，触发探针取消资源保护
+
+四.操作步骤：
+1.启动应用后，听云探针可采集事务性能数据
+2.根据当前GC CPU消耗百分比，修改听云探针GC CPU耗时百分比阈值，以满足触发资源保护GC CPU耗时条件。（GC CPU耗时百分比可通过jprofiler、jvisualvm、jconsole等工具查看）
+    修改tingyun.properties中nbs.circuit_breaker.gc_cpu_threshold小于此GC CPU耗时百分比。
+	听云探针更新资源保护阈值，有以下日志
+	INFO  - Heap breaker: updated configuration - enabled true GC CPU Threshold 2% Memory Threshold 20%.
+3.验证满足可用堆内存小于阈值的条件后，触发听云探针资源保护的情况：
+    应用启动一段时间后，访问 /ParamTest/memoryAdd ，可触发资源保护，查看听云探针日志输出以下日志：
+       WARN - Heap breaker: tripped at heap 15%(threshold:20%)  gcCPUTime 3%(threshold:2%)
+4.验证资源保护过程中，停止对事务数据的采集，以减小性能消耗。
+    触发资源保护后，探针停止事务性能数据的采集，仅采集jvm数据，查看听云探针日志，上报数据中无事务数据，报表中仅有jvm数据。
+5.验证可用堆内存高于阈值后，听云探针取消资源保护，恢复事务数据采集。
+    默认10分钟后定时清内存，减小内存消耗，触发探针取消资源保护，探针恢复事务性能数据的采集，或访问 /ParamTest/memoryClean 。
+	听云探针日志
+	INFO  - Heap breaker reset.
+6.验证可用堆内存、GC CPU耗时任一条件，未达到触发条件，探针正常采集事务数据。
+	 修改tingyun.properties中nbs.circuit_breaker.gc_cpu_threshold大于当前GC CPU耗时百分比。
+	 修改tingyun.properties中nbs.circuit_breaker.heap_threshold小于当前可用堆内存百分比。（可用堆内存可通过jprofiler、jvisualvm、jconsole等工具查看）
+	 访问/ParamTest/memoryAdd?size=10  (size参数值为要消耗的内存大小，需小于当前可用堆内存和可用堆内存阈值总和)
+
+	 
+	 
+
+
+   
+   
